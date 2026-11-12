@@ -104,8 +104,12 @@ def load_input(input_dir):
                 rec = json.loads(line)
             except ValueError:
                 continue
+            # Robustness: a read the recorder marked as failed (ok
+            # explicitly false), or one whose chart list is missing or
+            # empty, carries no usable signal - skip it rather than let
+            # a partial/corrupt snapshot distort the statistics.
             chart = rec.get("up_and_coming")
-            if not chart or not rec.get("at"):
+            if rec.get("ok") is False or not chart or not rec.get("at"):
                 continue
             reads.append(rec)
     reads.sort(key=lambda r: r["at"])
@@ -307,6 +311,12 @@ def build_forecast(reads, horizon_h, window_from):
             cand = [(g, p * CAP_NAMED / s) for g, p in cand]
         rows.extend({"universe_id": int(g), "place": k, "p": round(p, 6)}
                     for g, p in cand)
+
+    # Canonical output order: place ascending, then probability
+    # descending, then universe_id ascending. (Row order does not affect
+    # scoring; this just makes the emitted file canonical regardless of
+    # how the rows above were assembled.)
+    rows.sort(key=lambda r: (r["place"], -r["p"], r["universe_id"]))
 
     # top10: greedy by place over the modelled probabilities, filled from
     # the closing chart and then the most recent earlier charts.
